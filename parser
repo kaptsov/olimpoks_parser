@@ -1,0 +1,101 @@
+from selenium import webdriver
+from bs4 import BeautifulSoup
+import os
+import errno
+
+
+def make_sure_path_exists(path):
+    try:
+        os.makedirs(path)
+    except OSError as exception:
+        if exception.errno != errno.EEXIST:
+            raise
+
+
+def get_the_table_data(soup):
+    return soup.find("div", {"id": 'test-results'})
+
+
+def save_the_page_data(soup, ticket_number):
+    course_name = get_tag_value(soup, 'Курс')
+    path = 'D:\\olimpoks_v2\\' + course_name + '\\'
+    try:
+        make_sure_path_exists(path)
+    except:
+        path = 'D:\\olimpoks_v2\\' + course_name[:200] + '\\'
+        make_sure_path_exists(path)
+    mistakes = get_tag_value(soup, 'Допущено ошибок')
+    filepath = path + ticket_number + '.txt'
+    answer_table = get_the_table_data(soup)
+    a_t = answer_table.contents[1].contents[1].contents[3].contents
+    if (mistakes == '0') and not (os.path.exists(filepath)):
+        save_the_whole_ticket(a_t, filepath)
+    if (mistakes != '0') and not (os.path.exists(filepath)):
+        save_the_answer(a_t, path, ticket_number)
+
+
+
+def save_the_whole_ticket(a_t, filepath):
+    file = open(filepath, 'w+')
+    for answer in a_t:
+        number = answer.contents[1].text
+        question = answer.contents[2].text
+        right_answer = answer.contents[3].text
+        try:
+            file.write(number + ': ' + question + '\n \n * ' + right_answer + '\n \n')
+        except UnicodeEncodeError:
+            file.write(number + ': \n ИЗОБРАЖЕНИЕ НЕ РАСПОЗНАНО \n \n')
+    file.close()
+
+
+def save_the_answer(a_t, path, ticket_number):
+    filepath = path + ticket_number
+    for answer in a_t:
+        decidion = answer.contents[4].text
+        if decidion == 'Правильный ответ':
+            number = answer.contents[1].text
+            question = answer.contents[2].text
+            right_answer = answer.contents[3].text
+            make_sure_path_exists(filepath)
+            file = open(filepath + '\\' + number + '.txt', 'w+')
+            try:
+                file.write(number + ': ' + question + '\n \n * ' + right_answer + '\n \n')
+            except UnicodeEncodeError:
+                file.write(number + ': \n ИЗОБРАЖЕНИЕ НЕ РАСПОЗНАНО \n \n')
+            file.close()
+            pack_file_if_enough(len(a_t), filepath)
+
+
+def pack_file_if_enough(question_count, filepath):
+    files = next(os.walk(filepath))
+    file_count = len(files)
+    if question_count == file_count:
+        pass
+
+def get_tag_value(soup, value):
+    try:
+        return soup.find(text=value).findNext('td').string
+    except AttributeError:
+        pass
+
+
+def is_page_valid(ticket_number):
+    return (ticket_number != '0') and (ticket_number is not None)
+
+
+if __name__ == '__main__':
+    browser = webdriver.Firefox()
+    print('Открываем Олимпокс')
+    olimpoks_link = 'http://85.93.145.186:8245/Prepare/Examing/Result?attemptId='
+
+    for i in range(54, 11000):
+        print('Страница', i)
+        browser.get(olimpoks_link + str(i))
+        soup = BeautifulSoup(browser.page_source)
+        ticket_number = get_tag_value(soup, 'Билет')
+        print('Билет:', ticket_number)
+        if is_page_valid(ticket_number):
+            save_the_page_data(soup, ticket_number)
+            print('Сохранено')
+    browser.quit()
+
